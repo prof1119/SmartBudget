@@ -1,0 +1,767 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SmartBudget — Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400;1,700&family=DM+Mono:wght@300;400;500&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      :root {
+        --gold: #c8a96e;
+        --gold-dim: rgba(200, 169, 110, 0.3);
+        --gold-faint: rgba(200, 169, 110, 0.08);
+        --bg: #0a0a0f;
+        --text: #e8e4dc;
+        --text-dim: rgba(232, 228, 220, 0.5);
+        --text-mute: rgba(232, 228, 220, 0.3);
+        --serif: "Playfair Display", Georgia, serif;
+        --mono: "DM Mono", "Courier New", monospace;
+        --green: #7fb07f;
+        --red: #d07070;
+      }
+
+      body {
+        background: var(--bg);
+        color: var(--text);
+        font-family: var(--serif);
+        min-height: 100vh;
+      }
+
+      /* ─── Grid background ─── */
+      body::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        background-image:
+          linear-gradient(rgba(200, 169, 110, 0.03) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(200, 169, 110, 0.03) 1px, transparent 1px);
+        background-size: 60px 60px;
+        pointer-events: none;
+        z-index: 0;
+      }
+
+      .container {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 0 2rem;
+        position: relative;
+        z-index: 1;
+      }
+
+      /* ─── NAV ─── */
+      nav {
+        position: sticky;
+        top: 0;
+        z-index: 100;
+        padding: 1.25rem 2rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 1px solid var(--gold-faint);
+        background: rgba(10, 10, 15, 0.9);
+        backdrop-filter: blur(20px);
+      }
+      .nav-brand {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+      }
+      .nav-icon {
+        color: var(--gold);
+        font-size: 1.3rem;
+      }
+      .nav-name {
+        font-family: var(--mono);
+        font-size: 0.85rem;
+        color: #a89070;
+      }
+
+      .refresh-btn {
+        font-family: var(--mono);
+        font-size: 0.7rem;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--gold);
+        border: 1px solid var(--gold-dim);
+        background: transparent;
+        padding: 6px 16px;
+        cursor: pointer;
+        transition:
+          background 0.2s,
+          color 0.2s;
+      }
+      .refresh-btn:hover {
+        background: var(--gold);
+        color: var(--bg);
+      }
+      .refresh-btn:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+      }
+
+      /* ─── LOADING OVERLAY ─── */
+      #loader {
+        position: fixed;
+        inset: 0;
+        z-index: 200;
+        background: var(--bg);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: opacity 0.5s;
+      }
+      #loader.hidden {
+        opacity: 0;
+        pointer-events: none;
+      }
+      .loader-ring {
+        width: 40px;
+        height: 40px;
+        border: 2px solid var(--gold-faint);
+        border-top-color: var(--gold);
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      /* ─── ERROR BANNER ─── */
+      #error-banner {
+        display: none;
+        background: rgba(208, 112, 112, 0.1);
+        border: 1px solid rgba(208, 112, 112, 0.3);
+        color: var(--red);
+        font-family: var(--mono);
+        font-size: 0.75rem;
+        padding: 0.75rem 1.5rem;
+        text-align: center;
+      }
+
+      /* ─── PAGE HEADER ─── */
+      .page-header {
+        padding: 3rem 0 2rem;
+      }
+      .page-title {
+        font-family: var(--serif);
+        font-size: clamp(2rem, 5vw, 3.5rem);
+        font-weight: 900;
+        line-height: 1;
+        color: #f0ebe0;
+      }
+      .page-title span {
+        font-style: italic;
+        color: var(--gold);
+      }
+      .page-sub {
+        font-family: var(--mono);
+        font-size: 0.7rem;
+        color: var(--text-mute);
+        margin-top: 0.75rem;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+      }
+
+      /* ─── TAG ─── */
+      .tag {
+        font-family: var(--mono);
+        font-size: 0.62rem;
+        letter-spacing: 0.15em;
+        text-transform: uppercase;
+        color: var(--gold);
+        border: 1px solid var(--gold-dim);
+        padding: 3px 9px;
+        display: inline-block;
+        margin-bottom: 1.5rem;
+      }
+      .section-line {
+        display: inline-block;
+        width: 30px;
+        height: 1px;
+        background: var(--gold);
+        vertical-align: middle;
+        margin-right: 10px;
+      }
+
+      /* ─── STAT CARDS ─── */
+      .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1px;
+        background: rgba(200, 169, 110, 0.08);
+        margin-bottom: 3rem;
+      }
+      .stat-card {
+        background: var(--bg);
+        padding: 1.75rem 1.5rem;
+        position: relative;
+        overflow: hidden;
+        transition: transform 0.3s;
+      }
+      .stat-card::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 2px;
+        background: linear-gradient(
+          90deg,
+          transparent,
+          var(--gold),
+          transparent
+        );
+        opacity: 0;
+        transition: opacity 0.3s;
+      }
+      .stat-card:hover {
+        transform: translateY(-3px);
+      }
+      .stat-card:hover::before {
+        opacity: 1;
+      }
+
+      .stat-label {
+        font-family: var(--mono);
+        font-size: 0.65rem;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: rgba(200, 169, 110, 0.5);
+        margin-bottom: 0.5rem;
+      }
+      .stat-value {
+        font-family: var(--serif);
+        font-size: 2.4rem;
+        font-weight: 700;
+        color: var(--gold);
+        line-height: 1;
+        transition: color 0.3s;
+      }
+      .stat-badge {
+        display: inline-block;
+        font-family: var(--mono);
+        font-size: 0.65rem;
+        margin-top: 0.4rem;
+        padding: 2px 8px;
+        border-radius: 2px;
+      }
+      .stat-badge.up {
+        color: var(--green);
+        background: rgba(127, 176, 127, 0.1);
+      }
+      .stat-badge.down {
+        color: var(--red);
+        background: rgba(208, 112, 112, 0.1);
+      }
+      .stat-badge.neu {
+        color: var(--gold);
+        background: rgba(200, 169, 110, 0.1);
+      }
+      .stat-bar {
+        height: 2px;
+        background: rgba(200, 169, 110, 0.12);
+        margin-top: 1rem;
+        overflow: hidden;
+      }
+      .stat-bar-fill {
+        height: 100%;
+        background: linear-gradient(90deg, var(--gold), #e8c87a);
+        width: 0;
+        transition: width 1.2s ease;
+      }
+
+      /* ─── CHART SECTION ─── */
+      .chart-section {
+        margin-bottom: 3rem;
+      }
+      .chart-box {
+        border: 1px solid rgba(200, 169, 110, 0.12);
+        padding: 1.5rem;
+        background: rgba(200, 169, 110, 0.015);
+      }
+      .chart-title {
+        font-family: var(--mono);
+        font-size: 0.7rem;
+        color: var(--gold);
+        letter-spacing: 0.08em;
+        margin-bottom: 1.25rem;
+        text-transform: uppercase;
+      }
+      .bar-chart {
+        display: flex;
+        align-items: flex-end;
+        gap: 6px;
+        height: 120px;
+      }
+      .bar-wrap {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 4px;
+      }
+      .bar {
+        width: 100%;
+        background: rgba(200, 169, 110, 0.2);
+        transition:
+          height 0.8s ease,
+          background 0.3s;
+        cursor: pointer;
+        position: relative;
+      }
+      .bar:hover {
+        background: rgba(200, 169, 110, 0.55);
+      }
+      .bar.highlight {
+        background: var(--gold);
+      }
+      .bar-tooltip {
+        position: absolute;
+        bottom: 100%;
+        left: 50%;
+        transform: translateX(-50%) translateY(-4px);
+        background: #1a1a22;
+        border: 1px solid var(--gold-dim);
+        color: var(--gold);
+        font-family: var(--mono);
+        font-size: 0.6rem;
+        padding: 3px 7px;
+        white-space: nowrap;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.2s;
+      }
+      .bar:hover .bar-tooltip {
+        opacity: 1;
+      }
+      .bar-label {
+        font-family: var(--mono);
+        font-size: 0.55rem;
+        color: rgba(200, 169, 110, 0.35);
+        text-align: center;
+      }
+
+      /* ─── SAVING GOALS ─── */
+      .goals-section {
+        margin-bottom: 4rem;
+      }
+      .goals-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 1px;
+        background: rgba(200, 169, 110, 0.06);
+      }
+      .goal-card {
+        background: var(--bg);
+        padding: 1.5rem;
+        transition: background 0.3s;
+      }
+      .goal-card:hover {
+        background: rgba(200, 169, 110, 0.03);
+      }
+      .goal-name {
+        font-family: var(--mono);
+        font-size: 0.7rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: rgba(200, 169, 110, 0.5);
+        margin-bottom: 0.75rem;
+      }
+      .goal-amounts {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        margin-bottom: 0.6rem;
+      }
+      .goal-saved {
+        font-family: var(--serif);
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #f0ebe0;
+      }
+      .goal-target {
+        font-family: var(--mono);
+        font-size: 0.7rem;
+        color: var(--text-mute);
+      }
+      .goal-bar {
+        height: 3px;
+        background: rgba(200, 169, 110, 0.12);
+        margin-bottom: 0.5rem;
+        overflow: hidden;
+      }
+      .goal-fill {
+        height: 100%;
+        background: var(--gold);
+        width: 0;
+        transition: width 1.2s ease;
+      }
+      .goal-pct {
+        font-family: var(--mono);
+        font-size: 0.75rem;
+        color: var(--gold);
+      }
+
+      /* ─── FOOTER ─── */
+      footer {
+        position: relative;
+        z-index: 1;
+        padding: 2rem;
+        border-top: 1px solid var(--gold-faint);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        max-width: 1200px;
+        margin: 0 auto;
+      }
+      .footer-api {
+        font-family: var(--mono);
+        font-size: 0.65rem;
+        color: var(--text-mute);
+      }
+      .footer-api span {
+        color: var(--green);
+      }
+
+      /* ─── Skeleton shimmer ─── */
+      .skeleton {
+        background: linear-gradient(
+          90deg,
+          rgba(200, 169, 110, 0.05) 25%,
+          rgba(200, 169, 110, 0.12) 50%,
+          rgba(200, 169, 110, 0.05) 75%
+        );
+        background-size: 200% 100%;
+        animation: shimmer 1.2s infinite;
+        border-radius: 2px;
+        color: transparent !important;
+      }
+      @keyframes shimmer {
+        to {
+          background-position: -200% 0;
+        }
+      }
+
+      @media (max-width: 600px) {
+        .bar-chart {
+          height: 80px;
+          gap: 3px;
+        }
+        .stat-value {
+          font-size: 1.8rem;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Loading overlay -->
+    <div id="loader"><div class="loader-ring"></div></div>
+
+    <!-- Error banner -->
+    <div id="error-banner">
+      ⚠ Could not connect to API — make sure
+      <code>uvicorn main:app --reload</code> is running on port 8000.
+    </div>
+
+    <!-- NAV -->
+    <nav>
+      <div class="nav-brand">
+        <span class="nav-icon">◈</span>
+        <span class="nav-name">SmartBudget</span>
+      </div>
+      <button class="refresh-btn" id="refreshBtn" onclick="loadDashboard()">
+        ↻ Refresh
+      </button>
+    </nav>
+
+    <!-- MAIN -->
+    <main class="container">
+      <!-- Header -->
+      <div class="page-header">
+        <h1 class="page-title">Smart<span>Budget</span></h1>
+        <p class="page-sub" id="lastUpdated">Loading data…</p>
+      </div>
+
+      <!-- ── Stats ── -->
+      <div class="tag"><span class="section-line"></span>Overview</div>
+      <div class="stats-grid" id="statsGrid">
+        <!-- injected by JS -->
+      </div>
+
+      <!-- ── Bar Chart ── -->
+      <div class="chart-section">
+        <div class="tag">
+          <span class="section-line"></span>Monthly Expenses
+        </div>
+        <div class="chart-box">
+          <div class="chart-title" id="chartTitle">Loading…</div>
+          <div class="bar-chart" id="barChart"></div>
+        </div>
+      </div>
+
+      <!-- ── Saving Goals ── -->
+      <div class="goals-section">
+        <div class="tag"><span class="section-line"></span>Saving Goals</div>
+        <div class="goals-grid" id="goalsGrid"></div>
+      </div>
+    </main>
+
+    <footer>
+      <div class="footer-api">
+        API — <span id="apiStatus">connecting…</span>
+      </div>
+      <div
+        style="
+          font-family: var(--mono);
+          font-size: 0.65rem;
+          color: var(--text-mute);
+        "
+      >
+        Python FastAPI backend &amp; Vanilla JS frontend
+      </div>
+    </footer>
+
+    <!-- ═══════════════════════════════════════════
+     JavaScript — API Fetch & DOM update logic
+     ═══════════════════════════════════════════ -->
+    <script>
+      /* ── Config ── */
+      const API_BASE = "http://localhost:8000"; // Change if deployed elsewhere
+
+      /* ── Helpers ── */
+      const fmt = (n) =>
+        "$" + Number(n).toLocaleString("en-US", { minimumFractionDigits: 0 });
+      const now = () =>
+        new Date().toLocaleTimeString("en-US", {
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+
+      function el(id) {
+        return document.getElementById(id);
+      }
+      function setHTML(id, h) {
+        el(id).innerHTML = h;
+      }
+
+      /* ── Skeleton placeholders while loading ── */
+      function showSkeletons() {
+        // Stats
+        setHTML(
+          "statsGrid",
+          ["Income", "Expenses", "Saved", "Savings Rate"]
+            .map(
+              () => `
+      <div class="stat-card">
+        <div class="stat-label skeleton" style="width:70%;height:10px;margin-bottom:10px">&nbsp;</div>
+        <div class="stat-value skeleton" style="width:80%;height:36px">&nbsp;</div>
+        <div class="stat-bar"><div class="stat-bar-fill"></div></div>
+      </div>`,
+            )
+            .join(""),
+        );
+
+        // Chart
+        el("chartTitle").textContent = "Loading…";
+        setHTML(
+          "barChart",
+          Array.from(
+            { length: 12 },
+            () =>
+              `<div class="bar-wrap">
+        <div class="bar skeleton" style="height:60px"></div>
+        <div class="bar-label skeleton" style="width:20px;height:8px">&nbsp;</div>
+      </div>`,
+          ).join(""),
+        );
+
+        // Goals
+        setHTML(
+          "goalsGrid",
+          Array.from(
+            { length: 3 },
+            () => `
+      <div class="goal-card">
+        <div class="goal-name skeleton" style="width:60%;height:10px">&nbsp;</div>
+        <div class="goal-saved skeleton" style="width:50%;height:28px;margin:10px 0">&nbsp;</div>
+        <div class="goal-bar"><div class="goal-fill"></div></div>
+      </div>`,
+          ).join(""),
+        );
+      }
+
+      /* ── Render Stats ── */
+      function renderStats(stats) {
+        const cards = [
+          {
+            label: "Income",
+            value: fmt(stats.income),
+            badge: "↑ This month",
+            cls: "up",
+            fill: 75,
+          },
+          {
+            label: "Expenses",
+            value: fmt(stats.expenses),
+            badge: `↓ ${fmt(stats.expenses)} spent`,
+            cls: "down",
+            fill: Math.round((stats.expenses / stats.income) * 100),
+          },
+          {
+            label: "Saved",
+            value: fmt(stats.saved),
+            badge: "Net savings",
+            cls: "neu",
+            fill: Math.round((stats.saved / stats.income) * 100),
+          },
+          {
+            label: "Savings Rate",
+            value: stats.savings_rate + "%",
+            badge: "Of income",
+            cls: "neu",
+            fill: stats.savings_rate,
+          },
+        ];
+
+        setHTML(
+          "statsGrid",
+          cards
+            .map(
+              (c) => `
+      <div class="stat-card">
+        <div class="stat-label">${c.label}</div>
+        <div class="stat-value">${c.value}</div>
+        <span class="stat-badge ${c.cls}">${c.badge}</span>
+        <div class="stat-bar">
+          <div class="stat-bar-fill" data-fill="${Math.min(c.fill, 100)}"></div>
+        </div>
+      </div>`,
+            )
+            .join(""),
+        );
+
+        // Animate bars after paint
+        requestAnimationFrame(() => {
+          document.querySelectorAll(".stat-bar-fill").forEach((b) => {
+            b.style.width = (b.dataset.fill ?? 0) + "%";
+          });
+        });
+      }
+
+      /* ── Render Bar Chart ── */
+      function renderChart(monthly) {
+        const max = Math.max(...monthly.map((m) => m.amount));
+        el("chartTitle").textContent = "Monthly Expenses — Last 12 Months";
+
+        // Find current month index for highlight
+        const currentMonthIdx = new Date().getMonth();
+
+        setHTML(
+          "barChart",
+          monthly
+            .map((m, i) => {
+              const heightPct = Math.round((m.amount / max) * 100);
+              const isHighlight = i === currentMonthIdx ? "highlight" : "";
+              return `
+        <div class="bar-wrap">
+          <div class="bar ${isHighlight}" style="height:0" data-height="${heightPct}">
+            <div class="bar-tooltip">${m.month}: ${fmt(m.amount)}</div>
+          </div>
+          <div class="bar-label">${m.month[0]}</div>
+        </div>`;
+            })
+            .join(""),
+        );
+
+        // Animate bars up after paint
+        requestAnimationFrame(() => {
+          document.querySelectorAll(".bar[data-height]").forEach((b) => {
+            b.style.height = b.dataset.height + "%";
+          });
+        });
+      }
+
+      /* ── Render Saving Goals ── */
+      function renderGoals(goals) {
+        setHTML(
+          "goalsGrid",
+          goals
+            .map(
+              (g) => `
+      <div class="goal-card">
+        <div class="goal-name">${g.name}</div>
+        <div class="goal-amounts">
+          <div class="goal-saved">${fmt(g.saved)}</div>
+          <div class="goal-target">of ${fmt(g.target)}</div>
+        </div>
+        <div class="goal-bar">
+          <div class="goal-fill" data-fill="${g.percent}"></div>
+        </div>
+        <div class="goal-pct">${g.percent}% complete</div>
+      </div>`,
+            )
+            .join(""),
+        );
+
+        requestAnimationFrame(() => {
+          document.querySelectorAll(".goal-fill[data-fill]").forEach((f) => {
+            f.style.width = f.dataset.fill + "%";
+          });
+        });
+      }
+
+      /* ── Main fetch ── */
+      async function loadDashboard() {
+        const btn = el("refreshBtn");
+        btn.disabled = true;
+        btn.textContent = "↻ Loading…";
+        el("error-banner").style.display = "none";
+
+        showSkeletons();
+
+        try {
+          const res = await fetch(`${API_BASE}/api/dashboard`);
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const data = await res.json();
+
+          renderStats(data.stats);
+          renderChart(data.monthly_expenses);
+          renderGoals(data.saving_goals);
+
+          el("lastUpdated").textContent = `Last updated: ${now()}`;
+          el("apiStatus").innerHTML = `<span>● connected</span>`;
+          el("apiStatus").style.color = "var(--green)";
+        } catch (err) {
+          console.error("API error:", err);
+          el("error-banner").style.display = "block";
+          el("lastUpdated").textContent = "Failed to load data";
+          el("apiStatus").textContent = "● disconnected";
+          el("apiStatus").style.color = "var(--red)";
+        } finally {
+          btn.disabled = false;
+          btn.textContent = "↻ Refresh";
+          // Hide loader on first load
+          el("loader").classList.add("hidden");
+        }
+      }
+
+      /* ── Auto-refresh every 60 seconds ── */
+      loadDashboard();
+      setInterval(loadDashboard, 60_000);
+    </script>
+  </body>
+</html>
