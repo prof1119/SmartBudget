@@ -465,6 +465,22 @@
           font-size: 1.8rem;
         }
       }
+      .nav-actions{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;justify-content:flex-end}
+      .currency-select{font-family:var(--mono);font-size:.7rem;color:var(--gold);background:var(--bg);border:1px solid var(--gold-dim);padding:6px 8px}
+      .app-form{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:1rem;margin-bottom:1.25rem;font-family:var(--mono);font-size:.75rem}
+      .app-form label{display:flex;flex-direction:column;gap:.4rem;color:var(--text-dim)}
+      .app-form input,.app-form select{width:100%;min-width:0;background:#111119;border:1px solid var(--gold-dim);padding:.7rem;color:var(--text);font:inherit}
+      .app-form .wide{grid-column:1/-1}
+      .feedback{font-family:var(--mono);font-size:.75rem;color:var(--green);min-height:1em}
+      .feedback.error{color:var(--red)}
+      .transactions-list{display:grid;gap:.5rem}
+      .transaction-row{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:1rem;border-top:1px solid var(--gold-faint);padding:.8rem 0;font-family:var(--mono);font-size:.75rem}
+      .transaction-meta{color:var(--text-mute);font-size:.65rem;margin-top:.25rem;overflow-wrap:anywhere}
+      .amount-income{color:var(--green)} .amount-expense{color:var(--red)}
+      .delete-btn{font:inherit;color:var(--red);background:transparent;border:1px solid rgba(208,112,112,.35);padding:.35rem .55rem;cursor:pointer}
+      .goal-actions{display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.8rem}
+      .empty-state{padding:1rem;color:var(--text-dim);font-family:var(--mono);font-size:.75rem}
+      @media(max-width:600px){nav{padding:1rem;align-items:flex-start;gap:.75rem}.nav-actions{max-width:70%}.transaction-row{grid-template-columns:minmax(0,1fr) auto}.transaction-row .delete-btn{grid-column:2}.container{padding:0 1rem}}
     </style>
   </head>
   <body>
@@ -483,9 +499,14 @@
         <span class="nav-icon">◈</span>
         <span class="nav-name">SmartBudget</span>
       </div>
-      <button class="refresh-btn" id="refreshBtn" onclick="loadDashboard()">
-        ↻ Refresh
-      </button>
+      <div class="nav-actions">
+        <select id="currencySelect" class="currency-select" aria-label="Display currency">
+          <option value="EGP">EGP</option><option value="USD">USD</option>
+        </select>
+        <a class="refresh-btn" href="/api/transactions/export.csv">Export CSV</a>
+        <a class="refresh-btn" href="/api/backup">Backup DB</a>
+        <button class="refresh-btn" id="refreshBtn" type="button" onclick="loadDashboard()">↻ Refresh</button>
+      </div>
     </nav>
 
     <!-- MAIN -->
@@ -502,6 +523,23 @@
         <!-- injected by JS -->
       </div>
 
+      <!-- ── Transactions ── -->
+      <section class="chart-section">
+        <div class="tag"><span class="section-line"></span>Transactions</div>
+        <div class="chart-box">
+          <form id="transactionForm" class="app-form">
+            <label>Type<select id="txKind" required><option value="expense">Expense</option><option value="income">Income</option></select></label>
+            <label>Amount<input id="txAmount" type="number" min="0.01" step="0.01" required /></label>
+            <label>Category<input id="txCategory" maxlength="60" required /></label>
+            <label>Date<input id="txDate" type="date" required /></label>
+            <label class="wide">Note (optional)<input id="txNote" maxlength="240" /></label>
+            <button class="refresh-btn" type="submit">Save transaction</button>
+            <p id="txFeedback" class="feedback wide" role="status"></p>
+          </form>
+          <div id="transactionsList" class="transactions-list"></div>
+        </div>
+      </section>
+
       <!-- ── Bar Chart ── -->
       <div class="chart-section">
         <div class="tag">
@@ -517,6 +555,15 @@
       <div class="goals-section">
         <div class="tag"><span class="section-line"></span>Saving Goals</div>
         <div class="goals-grid" id="goalsGrid"></div>
+        <div class="chart-box" style="margin-top:1rem">
+          <form id="goalForm" class="app-form">
+            <label>Goal name<input id="goalName" maxlength="80" required /></label>
+            <label>Target amount<input id="goalTarget" type="number" min="0.01" step="0.01" required /></label>
+            <label>Already saved<input id="goalSaved" type="number" min="0" step="0.01" value="0" required /></label>
+            <button class="refresh-btn" type="submit">Create saving goal</button>
+            <p id="goalFeedback" class="feedback wide" role="status"></p>
+          </form>
+        </div>
       </div>
     </main>
 
@@ -540,25 +587,40 @@
      ═══════════════════════════════════════════ -->
     <script>
       /* ── Config ── */
-      const API_BASE = "http://localhost:8000"; // Change if deployed elsewhere
+      const API_BASE = "";
+      let currency = "EGP";
+      const currencyConfig = { EGP: { style: "currency", currency: "EGP", maximumFractionDigits: 2 }, USD: { style: "currency", currency: "USD", maximumFractionDigits: 2 } };
 
       /* ── Helpers ── */
-      const fmt = (n) =>
-        "$" + Number(n).toLocaleString("en-US", { minimumFractionDigits: 0 });
-      const now = () =>
-        new Date().toLocaleTimeString("en-US", {
-          hour: "2-digit",
-          minute: "2-digit",
-        });
-
-      function el(id) {
-        return document.getElementById(id);
+      const fmt = (n) => new Intl.NumberFormat("en-US", currencyConfig[currency] || currencyConfig.EGP).format(Number(n) || 0);
+      const now = () => new Date().toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+      function el(id) { return document.getElementById(id); }
+      function setHTML(id, h) { el(id).innerHTML = h; }
+      function escapeHTML(value) {
+        return String(value ?? "").replace(/[&<>"']/g, (ch) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));
       }
-      function setHTML(id, h) {
-        el(id).innerHTML = h;
+      async function apiRequest(path, options = {}) {
+        const response = await fetch(API_BASE + path, { headers: { "Content-Type": "application/json", ...(options.headers || {}) }, ...options });
+        if (!response.ok) {
+          let message = "Request failed (" + response.status + ")";
+          try { const data = await response.json(); message = data.detail || message; } catch (_) {}
+          throw new Error(message);
+        }
+        if (response.status === 204) return null;
+        return response.json();
+      }
+      function showFeedback(id, message, isError = false) {
+        const node = el(id); node.textContent = message; node.classList.toggle("error", isError);
+      }
+      function localDateString(date = new Date()) {
+        return [date.getFullYear(), String(date.getMonth()+1).padStart(2,"0"), String(date.getDate()).padStart(2,"0")].join("-");
+      }
+      function applyCurrency(value) {
+        currency = currencyConfig[value] ? value : "EGP";
+        try { localStorage.setItem("smartbudget.currency", currency); } catch (_) {}
       }
 
-      /* ── Skeleton placeholders while loading ── */
+            /* ── Skeleton placeholders while loading ── */
       function showSkeletons() {
         // Stats
         setHTML(
@@ -697,71 +759,108 @@
 
       /* ── Render Saving Goals ── */
       function renderGoals(goals) {
-        setHTML(
-          "goalsGrid",
-          goals
-            .map(
-              (g) => `
-      <div class="goal-card">
-        <div class="goal-name">${g.name}</div>
-        <div class="goal-amounts">
-          <div class="goal-saved">${fmt(g.saved)}</div>
-          <div class="goal-target">of ${fmt(g.target)}</div>
-        </div>
-        <div class="goal-bar">
-          <div class="goal-fill" data-fill="${g.percent}"></div>
-        </div>
-        <div class="goal-pct">${g.percent}% complete</div>
-      </div>`,
-            )
-            .join(""),
-        );
-
-        requestAnimationFrame(() => {
-          document.querySelectorAll(".goal-fill[data-fill]").forEach((f) => {
-            f.style.width = f.dataset.fill + "%";
-          });
-        });
+        setHTML("goalsGrid", goals.length ? goals.map((g) => `
+          <div class="goal-card">
+            <div class="goal-name">${escapeHTML(g.name)}</div>
+            <div class="goal-amounts"><div class="goal-saved">${fmt(g.saved)}</div><div class="goal-target">of ${fmt(g.target)}</div></div>
+            <div class="goal-bar"><div class="goal-fill" data-fill="${Math.min(Number(g.percent)||0,100)}"></div></div>
+            <div class="goal-pct">${Math.min(Number(g.percent)||0,100)}% complete</div>
+            <div class="goal-actions"><button class="delete-btn" type="button" data-goal-progress="${Number(g.id)}" data-goal-saved="${Number(g.saved)}" data-goal-target="${Number(g.target)}">Update saved</button><button class="delete-btn" type="button" data-goal-delete="${Number(g.id)}">Delete goal</button></div>
+          </div>`).join("") : '<div class="empty-state">No saving goals yet. Create one below.</div>');
+        requestAnimationFrame(() => document.querySelectorAll(".goal-fill[data-fill]").forEach((f) => { f.style.width = f.dataset.fill + "%"; }));
       }
 
-      /* ── Main fetch ── */
+      function renderTransactions(transactions) {
+        setHTML("transactionsList", transactions.length ? transactions.map((t) => `
+          <div class="transaction-row">
+            <div><strong>${escapeHTML(t.category)}</strong><div class="transaction-meta">${escapeHTML(t.occurred_on)}${t.note ? " · " + escapeHTML(t.note) : ""}</div></div>
+            <div class="${t.kind === "income" ? "amount-income" : "amount-expense"}">${t.kind === "income" ? "+" : "−"}${fmt(t.amount)}</div>
+            <button class="delete-btn" type="button" data-tx-delete="${Number(t.id)}" aria-label="Delete transaction">Delete</button>
+          </div>`).join("") : '<div class="empty-state">No transactions yet. Add your first one above.</div>');
+      }
+
+            /* ── Main fetch ── */
       async function loadDashboard() {
         const btn = el("refreshBtn");
-        btn.disabled = true;
-        btn.textContent = "↻ Loading…";
+        btn.disabled = true; btn.textContent = "↻ Loading…";
         el("error-banner").style.display = "none";
-
         showSkeletons();
-
         try {
-          const res = await fetch(`${API_BASE}/api/dashboard`);
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-          const data = await res.json();
-
-          renderStats(data.stats);
-          renderChart(data.monthly_expenses);
-          renderGoals(data.saving_goals);
-
-          el("lastUpdated").textContent = `Last updated: ${now()}`;
-          el("apiStatus").innerHTML = `<span>● connected</span>`;
-          el("apiStatus").style.color = "var(--green)";
+          const data = await apiRequest("/api/dashboard");
+          renderStats(data.stats); renderChart(data.monthly_expenses || []);
+          renderGoals(data.saving_goals || []); renderTransactions(data.recent_transactions || []);
+          el("lastUpdated").textContent = "Last updated: " + now();
+          el("apiStatus").textContent = "● connected"; el("apiStatus").style.color = "var(--green)";
         } catch (err) {
           console.error("API error:", err);
           el("error-banner").style.display = "block";
           el("lastUpdated").textContent = "Failed to load data";
-          el("apiStatus").textContent = "● disconnected";
-          el("apiStatus").style.color = "var(--red)";
-        } finally {
-          btn.disabled = false;
-          btn.textContent = "↻ Refresh";
-          // Hide loader on first load
-          el("loader").classList.add("hidden");
-        }
+          el("apiStatus").textContent = "● disconnected"; el("apiStatus").style.color = "var(--red)";
+        } finally { btn.disabled = false; btn.textContent = "↻ Refresh"; el("loader").classList.add("hidden"); }
       }
 
-      /* ── Auto-refresh every 60 seconds ── */
+            el("currencySelect").value = (() => { try { return localStorage.getItem("smartbudget.currency") || "EGP"; } catch (_) { return "EGP"; } })();
+      applyCurrency(el("currencySelect").value);
+      el("currencySelect").addEventListener("change", (event) => { applyCurrency(event.target.value); loadDashboard(); });
+      el("txDate").value = localDateString();
+
+      el("transactionForm").addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const form = event.currentTarget; // Capture before await; currentTarget is null after dispatch.
+        const button = form.querySelector('button[type="submit"]');
+        button.disabled = true; showFeedback("txFeedback", "Saving transaction…");
+        try {
+          await apiRequest("/api/transactions", { method: "POST", body: JSON.stringify({
+            kind: el("txKind").value, amount: Number(el("txAmount").value),
+            category: el("txCategory").value.trim(), note: el("txNote").value.trim(), occurred_on: el("txDate").value
+          })});
+          form.reset(); el("txDate").value = localDateString();
+          showFeedback("txFeedback", "Transaction saved."); await loadDashboard();
+        } catch (error) { showFeedback("txFeedback", error.message, true); }
+        finally { button.disabled = false; }
+      });
+
+      el("goalForm").addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const form = event.currentTarget;
+        const button = form.querySelector('button[type="submit"]');
+        button.disabled = true; showFeedback("goalFeedback", "Saving goal…");
+        try {
+          await apiRequest("/api/saving-goals", { method: "POST", body: JSON.stringify({
+            name: el("goalName").value.trim(), target: Number(el("goalTarget").value), saved: Number(el("goalSaved").value)
+          })});
+          form.reset(); el("goalSaved").value = "0";
+          showFeedback("goalFeedback", "Saving goal created."); await loadDashboard();
+        } catch (error) { showFeedback("goalFeedback", error.message, true); }
+        finally { button.disabled = false; }
+      });
+
+      document.addEventListener("click", async (event) => {
+        const target = event.target;
+        if (!(target instanceof Element)) return;
+        const txButton = target.closest("[data-tx-delete]");
+        const goalButton = target.closest("[data-goal-delete]");
+        const progressButton = target.closest("[data-goal-progress]");
+        try {
+          if (txButton && confirm("Delete this transaction? This cannot be undone.")) {
+            await apiRequest("/api/transactions/" + Number(txButton.dataset.txDelete), { method: "DELETE" });
+            await loadDashboard();
+          } else if (goalButton && confirm("Delete this saving goal? This cannot be undone.")) {
+            await apiRequest("/api/saving-goals/" + Number(goalButton.dataset.goalDelete), { method: "DELETE" });
+            await loadDashboard();
+          } else if (progressButton) {
+            const current = Number(progressButton.dataset.goalSaved), maximum = Number(progressButton.dataset.goalTarget);
+            const entered = prompt("Enter total amount saved (maximum " + fmt(maximum) + "):", String(current));
+            if (entered === null) return;
+            const saved = Number(entered);
+            if (!Number.isFinite(saved) || saved < 0 || saved > maximum) { alert("Enter a valid amount between 0 and " + maximum + "."); return; }
+            await apiRequest("/api/saving-goals/" + Number(progressButton.dataset.goalProgress), { method: "PATCH", body: JSON.stringify({ saved }) });
+            await loadDashboard();
+          }
+        } catch (error) { alert(error.message); }
+      });
+
       loadDashboard();
-      setInterval(loadDashboard, 60_000);
     </script>
   </body>
 </html>
