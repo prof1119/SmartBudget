@@ -668,93 +668,42 @@
 
       /* ── Render Stats ── */
       function renderStats(stats) {
+        const income = Number(stats.income) || 0;
+        const expenses = Number(stats.expenses) || 0;
+        const saved = Number(stats.saved) || 0;
         const cards = [
-          {
-            label: "Income",
-            value: fmt(stats.income),
-            badge: "↑ This month",
-            cls: "up",
-            fill: 75,
-          },
-          {
-            label: "Expenses",
-            value: fmt(stats.expenses),
-            badge: `↓ ${fmt(stats.expenses)} spent`,
-            cls: "down",
-            fill: Math.round((stats.expenses / stats.income) * 100),
-          },
-          {
-            label: "Saved",
-            value: fmt(stats.saved),
-            badge: "Net savings",
-            cls: "neu",
-            fill: Math.round((stats.saved / stats.income) * 100),
-          },
-          {
-            label: "Savings Rate",
-            value: stats.savings_rate + "%",
-            badge: "Of income",
-            cls: "neu",
-            fill: stats.savings_rate,
-          },
+          { label: "Income", value: fmt(income), badge: "↑ This month", cls: "up", fill: income > 0 ? 100 : 0 },
+          { label: "Expenses", value: fmt(expenses), badge: "↓ " + fmt(expenses) + " spent", cls: "down", fill: income > 0 ? expenses / income * 100 : 0 },
+          { label: "Saved", value: fmt(saved), badge: "Net savings", cls: "neu", fill: income > 0 ? saved / income * 100 : 0 },
+          { label: "Savings Rate", value: (Number(stats.savings_rate) || 0) + "%", badge: "Of income", cls: "neu", fill: Number(stats.savings_rate) || 0 },
         ];
-
-        setHTML(
-          "statsGrid",
-          cards
-            .map(
-              (c) => `
-      <div class="stat-card">
-        <div class="stat-label">${c.label}</div>
-        <div class="stat-value">${c.value}</div>
-        <span class="stat-badge ${c.cls}">${c.badge}</span>
-        <div class="stat-bar">
-          <div class="stat-bar-fill" data-fill="${Math.min(c.fill, 100)}"></div>
-        </div>
-      </div>`,
-            )
-            .join(""),
-        );
-
-        // Animate bars after paint
-        requestAnimationFrame(() => {
-          document.querySelectorAll(".stat-bar-fill").forEach((b) => {
-            b.style.width = (b.dataset.fill ?? 0) + "%";
-          });
-        });
+        setHTML("statsGrid", cards.map((c) => `
+          <div class="stat-card">
+            <div class="stat-label">${c.label}</div>
+            <div class="stat-value">${c.value}</div>
+            <span class="stat-badge ${c.cls}">${escapeHTML(c.badge)}</span>
+            <div class="stat-bar"><div class="stat-bar-fill" data-fill="${Math.max(0, Math.min(Number(c.fill) || 0, 100))}"></div></div>
+          </div>`).join(""));
+        requestAnimationFrame(() => document.querySelectorAll(".stat-bar-fill").forEach((bar) => { bar.style.width = (bar.dataset.fill || 0) + "%"; }));
       }
 
-      /* ── Render Bar Chart ── */
       function renderChart(monthly) {
-        const max = Math.max(...monthly.map((m) => m.amount));
+        const values = monthly.map((item) => Number(item.amount) || 0);
+        const max = Math.max(1, ...values);
         el("chartTitle").textContent = "Monthly Expenses — Last 12 Months";
-
-        // Find current month index for highlight
-        const currentMonthIdx = new Date().getMonth();
-
-        setHTML(
-          "barChart",
-          monthly
-            .map((m, i) => {
-              const heightPct = Math.round((m.amount / max) * 100);
-              const isHighlight = i === currentMonthIdx ? "highlight" : "";
-              return `
-        <div class="bar-wrap">
-          <div class="bar ${isHighlight}" style="height:0" data-height="${heightPct}">
-            <div class="bar-tooltip">${m.month}: ${fmt(m.amount)}</div>
-          </div>
-          <div class="bar-label">${m.month[0]}</div>
-        </div>`;
-            })
-            .join(""),
-        );
-
-        // Animate bars up after paint
-        requestAnimationFrame(() => {
-          document.querySelectorAll(".bar[data-height]").forEach((b) => {
-            b.style.height = b.dataset.height + "%";
-          });
-        });
+        const currentMonthIdx = monthly.length - 1;
+        setHTML("barChart", monthly.map((m, i) => {
+          const heightPct = Math.max(0, Math.round(((Number(m.amount) || 0) / max) * 100));
+          const isHighlight = i === currentMonthIdx ? "highlight" : "";
+          return `
+            <div class="bar-wrap">
+              <div class="bar ${isHighlight}" style="height:0" data-height="${heightPct}">
+                <div class="bar-tooltip">${escapeHTML(m.month)}: ${fmt(m.amount)}</div>
+              </div>
+              <div class="bar-label">${escapeHTML(String(m.month || "").split(" ")[0])}</div>
+            </div>`;
+        }).join(""));
+        requestAnimationFrame(() => document.querySelectorAll(".bar[data-height]").forEach((bar) => { bar.style.height = bar.dataset.height + "%"; }));
       }
 
       /* ── Render Saving Goals ── */
